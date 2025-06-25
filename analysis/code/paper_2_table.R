@@ -3,36 +3,7 @@ library(janitor)
 library(tidyverse)
 annotate<-read.csv('./analysis/data/annotated_texts.csv')
 
-annotate %>% 
-  mutate(Finn=as.logical(case_when(Finn=='NOT SDG 10'~ 'FALSE',
-                   Finn=='SDG 10'~ 'TRUE',
-                   Finn=='NOT SDG 7'~ 'FALSE',
-                   Finn=='SDG 7'~ 'TRUE',
-                   Finn=='SKIP'~ NA,Finn=='TO DO'~ NA, TRUE~Finn)),
-         Gib=as.logical(case_when(Gib=='NOT SDG 10'~ 'FALSE',
-                       Gib=='SDG 10'~ 'TRUE',
-                       Gib=='NOT SDG 7'~ 'FALSE',
-                       Gib=='SDG 7'~ 'TRUE',
-                       Gib=='SKIP'~ NA, Gib=='TO DO'~ NA, TRUE~Gib)),
-         `Jean-Baptiste`=as.logical(case_when(`Jean-Baptiste`=='NOT SDG 10'~ 'FALSE',
-                       `Jean-Baptiste`=='SDG 10'~ 'TRUE',
-                       `Jean-Baptiste`=='NOT SDG 7'~ 'FALSE',
-                       `Jean-Baptiste`=='SDG 7'~ 'TRUE',
-                       `Jean-Baptiste`=='SKIP'~ NA, `Jean-Baptiste`=='TO DO'~ NA, TRUE~`Jean-Baptiste`)),
-         Meike=as.logical(case_when(Meike=='NOT SDG 10'~ 'FALSE',
-                         Meike=='SDG 10'~ 'TRUE',
-                         Meike=='SKIP'~ NA, Meike=='TO DO'~ NA, TRUE~Meike)),
-         Ivan=as.logical(case_when(Ivan=='SKIP'~ NA, Ivan=='TO DO'~ NA, TRUE~Ivan)),
-         Steve=as.logical(case_when(Steve=='NOT SDG 10'~ 'FALSE',
-                         Steve=='SDG 10'~ 'TRUE',
-                         Steve=='NOT SDG 7'~ 'FALSE',
-                         Steve=='SDG 7'~ 'TRUE',
-                         Steve=='SKIP'~ NA,Steve=='TO DO'~ NA, TRUE~Steve)),
-         Consensus=as.logical(case_when(Consensus=='NOT SDG 10'~ 'FALSE',
-                                    Consensus=='SDG 10'~ 'TRUE',
-                                    Consensus=='NOT SDG 7'~ 'FALSE',
-                                    Consensus=='SDG 7'~ 'TRUE',
-                                    Consensus=='IGNORE'~ NA,TRUE~Consensus))) %>% 
+annotate %>%
   rowwise() %>% 
   mutate(Annotators=sum(!is.na(Meike), !is.na(Steve), !is.na(Finn), !is.na(Ivan),
                         !is.na(`Jean-Baptiste`),!is.na(Gib)),
