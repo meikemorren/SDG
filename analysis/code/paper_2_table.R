@@ -1,7 +1,7 @@
 library(gt)
 library(janitor)
 library(tidyverse)
-annotate<-read.csv('./analysis/data/annotated_texts.csv')
+annotate<-read_csv('./analysis/data/annotated_texts.csv')
 
 annotate %>%
   rowwise() %>% 
@@ -9,7 +9,7 @@ annotate %>%
                         !is.na(`Jean-Baptiste`),!is.na(Gib)),
          Positive=sum(Meike, Steve, Finn, Ivan,`Jean-Baptiste`,Gib, na.rm=T),
          Negative=Annotators-Positive,
-         Undecided=sum(Consensus))%>%
+         Undecided=sum(Consensus)) %>%
   ungroup() %>%
   group_by(SDG) %>%
   reframe(Annotators=round(mean(Annotators),3),
@@ -26,8 +26,15 @@ annotate %>%
   arrange(SDG) %>% #colMeans() %>% 
   # Total & 3.34 & 617 & 637 & 446 & 0.7892451 \\ 
   adorn_totals("row") %>%
+  # tibble::rownames_to_column() %>%  
+  # pivot_longer(-rowname) %>% 
+  # pivot_wider(names_from=rowname, values_from=value) %>% 
+  # rotate_df() %>% 
   gt(.) %>% 
   gtsave(str_c('./analysis/output/curated_data.tex'))
+
+# library(sjmisc)
+# mtcars %>% rotate_df()
 
   #### tokens
 library(stringr)
@@ -39,7 +46,8 @@ for(i in seq_along(annotate$`Text ID`)) {
   clean <- tibble(id = annotate$`Text ID`[i],
                   text = annotate$Text[i],
                   sdg = annotate$SDG[i],
-                  label = Consensus[i]) %>%
+                  label = ifelse(is.na(annotate$Consensus[i]), 'Undecided', 
+                                 ifelse(annotate$Consensus[i]==TRUE, 'Confirmed','Rejected')))%>%
     unnest_tokens(word, text, strip_punct = TRUE) %>%
     mutate(word = str_replace(word, "('s)", "")) %>% 
     filter(nchar(word) > 2) %>% 
@@ -48,25 +56,57 @@ for(i in seq_along(annotate$`Text ID`)) {
   series <- rbind(series, clean)
 }
 
-head(series)
-mean(tapply(series$word, series$id, length))
+# head(series)
+# table(series$label)
+# mean(tapply(series$word, series$id, length))
 
-df.char<-cbind(n=tapply(series$word, series$id, length), 
+
+
+
+sdg1<-
+  ggplot(df_summary_country,aes(factor(ideology), 
+                                mean_cons_country, fill=country)) + 
+  geom_col(fill='lightgray') + geom_bar(stat='identity',
+                                        position='dodge')+
+  scale_fill_manual(values = hcl.colors(n=4,palette = 'berlin', 
+                                        alpha = .8)) + 
+  ylim(0,12)+
+  labs(x=NULL, y=NULL, title="")+
+  scale_y_continuous(breaks=c(0,1,2,3),
+                     limits = c(0,12),"Per country", 
+                     sec.axis = sec_axis(~ . / 4, breaks=NULL, name=NULL))+
+  theme(legend.position="none") + 
+  theme(plot.title = element_text(hjust = .5))+
+  geom_signif(comparisons=list(c("0", "10")), 
+              annotations="Conservation \n t = -3.060***",
+              y_position = 11.5, tip_length = 0.2, vjust = .5)+
+  theme(axis.text.y.right = element_blank(),
+        axis.title.y.left = element_text(hjust=0.1))
+
+# get the info per text
+df.char<-NULL
+df.char<-as.data.frame(cbind(n=tapply(series$word, series$id, length), 
                id=names(tapply(series$word, series$id, length)),
-               sdg=aggregate(series$sdg, list(series$id),first))
+               sdg=aggregate(series$sdg, list(series$id),first)$x, # it is the same per id, so take the first
+               label=aggregate(series$label, list(series$id),first)$x))
 rownames(df.char)<-NULL
 
+# get summary of n words per label
 df.char %>% 
-  as.data.frame() %>% 
-  rename(sdg=sdg.x) %>% 
   mutate(n=as.numeric(n),
          sdg = factor(sdg,levels=c('1','2','3','4','5','6','7','8','9',
-                                          '10','11','12','13','14','15','16','17'))) %>% 
-  ggplot(aes(x=n, fill=sdg))+geom_histogram()+
-  scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
-                             '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
-                             '#126A9F','#13496B'))+
-  facet_wrap(~sdg)+
+                                   '10','11','12','13','14','15','16','17'))) %>% 
+  group_by(label, sdg) %>% 
+  summarise(mean_n=mean(as.numeric(n)))->df.char.summary
+  
+df.char.summary %>% 
+  ggplot(aes(x=n, color=label, fill=sdg))+
+  geom_histogram()+
+  scale_color_manual(values=c("green","red",'blue'))+
+  # scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
+  #                            '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
+  #                            '#126A9F','#13496B'))+
+  facet_wrap(~sdg, scales='fixed')+
   theme(legend.position="none", 
         axis.title = element_blank())
 
