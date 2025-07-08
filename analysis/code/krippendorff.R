@@ -11,18 +11,9 @@ names(df)[11] <- "agreement"
 df <- df %>%
   rowwise() %>%
   mutate(
-    Nannotators = sum(!is.na(c_across(c(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan))))
+    annotators = sum(!is.na(c_across(c(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan))))
   ) %>%
-  ungroup() %>%
-  # as an input we need the columns of all annotators
-  rename(
-    annotator1 = Finn,
-    annotator2 = Steve,
-    annotator3 = Meike,
-    annotator4 = Gib,
-    annotator5 = `Jean.Baptiste`,
-    annotator6 = Ivan
-  ) 
+  ungroup()
 
 osdg <- read_excel("analysis/data/OSDG/osdg-community-data-v2023-04-01.xlsx") %>%
   mutate(annotators = rowSums(select(., labels_negative, labels_positive), 
@@ -32,19 +23,19 @@ df_unagreed <- df %>%
   filter(is.na(Consensus)) %>%
   left_join(osdg %>% select(text_id, agreement, annotators),
             by = "text_id")
-  
+
 df_unagreed <- df_unagreed %>%
   group_by(SDG) %>%
   mutate(
     alpha.x = krippalpha(
-      as.matrix(select(cur_data_all(), starts_with('annotator'), agreement.x)),
+      as.matrix(select(cur_data_all(), annotators.x, agreement.x)),
       metric = "interval"
-    )$value,
+    )$alpha,
     alpha.y = krippalpha(
-      as.matrix(select(cur_data_all(), starts_with('annotator'), agreement.y)),
+      as.matrix(select(cur_data_all(), annotators.y, agreement.y)),
       metric = "interval"
-    )$value
-  ) %>% select(starts_with('alpha'))
+    )$alpha
+  ) %>%
   ungroup()
 
 df_final <- df_unagreed %>%
@@ -65,11 +56,12 @@ df_final <- df_unagreed %>%
     text = Text,
     group = Group,
     remarks,
-    agreement_internal  = agreement.x,
+    agreement_internal = agreement.x,
     annotators_internal = annotators.x,
-    agreement_external  = agreement.y,
-    annotators_external = annotators.y#,
-    # alpha_internal = alpha.x,
-    # alpha_external = alpha.y
+    agreement_external = agreement.y,
+    annotators_external = annotators.y,
+    alpha_internal = alpha.x,
+    alpha_external = alpha.y
   )
 
+write.csv(df_final, "analysis/data/sdg_alphas.csv", row.names = F)
