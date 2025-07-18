@@ -117,7 +117,7 @@ df_final <- df_unagreed %>%
 write.csv(df_final, "analysis/data/sdg_alphas.csv", row.names = F)
 
 ## JOSUA: adjust this latex table so that alpha is in last column
-## we should have a table for agreed texts (like below) and one for only the unagreed texts
+## we should have a table for all texts (like below) 
 annotate<-read_csv('./analysis/data/annotated_texts.csv')
 annotate %>% # here i use the annotated_texts.csv, 
   rowwise() %>% 
