@@ -128,6 +128,7 @@ annotate %>%
           negative=sum(consensus=='FALSE', na.rm=T),
           undecided=100-(positive+negative),
           agreement=round(mean(agreement),3),
+          alpha=mean(alpha),
           sdg=as.numeric(sdg)
   ) %>%
   distinct(.) %>%
