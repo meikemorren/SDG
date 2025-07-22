@@ -3,6 +3,9 @@ library(dplyr)
 library(tidyr)
 library(purrr)
 library(icr)
+library(gt)
+library(janitor)
+library(stringr)
 
 df <- read.csv("analysis/data/annotated_texts.csv",
                stringsAsFactors = FALSE)
@@ -15,13 +18,16 @@ df <- df %>%
     ## JOSUA: i recalculate the agreement (alignment) bc this was not correct (when 2 out of 3 agreed it was .333)
     agreement_true = sum(c_across(c(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan)), na.rm=T),
     agreement_false = sum(!c_across(c(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan)), na.rm=T),
-    agreement = max(agreement_true, agreement_false)
+    agreement = max(agreement_true, agreement_false) / annotators,
+    Consensus = ifelse(agreement == 1, ifelse(agreement_true == annotators, T, F), NA)
   ) %>%   arrange(SDG, text_id) %>% 
   ungroup()
 
 osdg <- read_excel("analysis/data/OSDG/osdg-community-data-v2023-04-01.xlsx") %>%
   mutate(annotators = rowSums(select(., labels_negative, labels_positive), 
-                              na.rm = TRUE))
+                              na.rm = TRUE),
+         consensus = ifelse(agreement == 1, ifelse(labels_positive == annotators, T, F), NA)
+         )
 
 ## calculate alpha for each SDG, only for our annotation
 #  nominal or interval gets same value?
@@ -35,8 +41,6 @@ for(i in unique(df$SDG)){
 }
 
 table(df$alpha)
-
-## JOSUA: now redo this for the unagreed texts and for OSDG
 
 
 
@@ -60,35 +64,35 @@ table(df$alpha)
 #   ungroup() 
 
 
-df_unagreed <- df %>%
-  filter(is.na(Consensus)) %>%
-  left_join(osdg %>% select(text_id, agreement, annotators),
-            by = "text_id") %>% 
-  arrange(SDG, text_id)
-
-df_unagreed <- df_unagreed %>%
-  group_by(SDG) %>%
-  select(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan, 
-         starts_with('annotators'), starts_with('agreement')) %>% 
-  # mutate()
-  mutate(
-    # alpha.x = krippalpha(df_unagreed %>% select(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan, annotators.x, agreement.x) %>% 
-    #                        as.matrix(), 
-    #                      # annotators.x, agreement.x, 
-    #                      metric = "interval", bootstrap = F, bootnp = TRUE
-    # )$alpha,
-    alpha.x = krippalpha(
-      as.matrix(select(cur_data_all(), annotators.x, agreement.x)),
-      metric = "interval"
-    )$alpha,
-    alpha.y = krippalpha(
-      as.matrix(select(cur_data_all(), annotators.y, agreement.y)),
-      metric = "interval"
-    )$alpha
-  ) %>%
-  ungroup() %>% print(n=400)
-
-df_final <- df_unagreed %>%
+# df_unagreed <- df %>%
+#   filter(is.na(Consensus)) %>%
+#   left_join(osdg %>% select(text_id, agreement, annotators),
+#             by = "text_id") %>% 
+#   arrange(SDG, text_id)
+# 
+# df_unagreed <- df_unagreed %>%
+#   group_by(SDG) %>%
+#   select(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan, 
+#          starts_with('annotators'), starts_with('agreement')) %>% 
+#   # mutate()
+#   mutate(
+#     # alpha.x = krippalpha(df_unagreed %>% select(Finn, Gib, `Jean.Baptiste`, Meike, Steve, Ivan, annotators.x, agreement.x) %>% 
+#     #                        as.matrix(), 
+#     #                      # annotators.x, agreement.x, 
+#     #                      metric = "interval", bootstrap = F, bootnp = TRUE
+#     # )$alpha,
+#     alpha.x = krippalpha(
+#       as.matrix(select(cur_data_all(), annotators.x, agreement.x)),
+#       metric = "interval"
+#     )$alpha,
+#     alpha.y = krippalpha(
+#       as.matrix(select(cur_data_all(), annotators.y, agreement.y)),
+#       metric = "interval"
+#     )$alpha
+#   ) %>%
+#   ungroup() %>% print(n=400)
+# 
+df_final <- df %>%
   unite(
     col = "remarks",
     Notes,
@@ -106,45 +110,48 @@ df_final <- df_unagreed %>%
     text = Text,
     group = Group,
     remarks,
-    agreement_internal = agreement.x,
-    annotators_internal = annotators.x,
-    agreement_external = agreement.y,
-    annotators_external = annotators.y,
-    alpha_internal = alpha.x,
-    alpha_external = alpha.y
+    consensus = Consensus,
+    agreement,
+    agreement_true,
+    agreement_false,
+    annotators,
+    alpha
   )
 
 write.csv(df_final, "analysis/data/sdg_alphas.csv", row.names = F)
 
-## JOSUA: adjust this latex table so that alpha is in last column
-## we should have a table for all texts (like below) 
-annotate<-read_csv('./analysis/data/annotated_texts.csv')
-annotate %>% # here i use the annotated_texts.csv, 
-  rowwise() %>% 
-  mutate(Annotators=sum(!is.na(Meike), !is.na(Steve), !is.na(Finn), !is.na(Ivan),
-                        !is.na(`Jean-Baptiste`),!is.na(Gib)),
-         Positive=sum(Meike, Steve, Finn, Ivan,`Jean-Baptiste`,Gib, na.rm=T),
-         Negative=Annotators-Positive,
-         Undecided=sum(Consensus)) %>%
-  ungroup() %>%
-  group_by(SDG) %>%
-  reframe(Annotators=round(mean(Annotators),3),
-          Positive=sum(Consensus=='TRUE', na.rm=T),
-          Negative=sum(Consensus=='FALSE', na.rm=T),
-          # Undecided=sum(Consensus=='UNDECIDED', na.rm=T)
-          Undecided=100-(Positive+Negative),
-          Alignment=round(mean(Alignment),3), # JOSUA: this should be the new agreement
-          SDG=as.numeric(SDG)
+annotate<-df_final
+annotate %>%
+  group_by(sdg) %>%
+  reframe(annotators=round(mean(annotators),3),
+          positive=sum(consensus=='TRUE', na.rm=T),
+          negative=sum(consensus=='FALSE', na.rm=T),
+          undecided=100-(positive+negative),
+          agreement=round(mean(agreement),3),
+          sdg=as.numeric(sdg)
   ) %>%
   distinct(.) %>%
-  pivot_longer(-SDG) %>%
+  pivot_longer(-sdg) %>%
   pivot_wider(names_from=name, values_from=value) %>%
-  arrange(SDG) %>% #colMeans() %>% 
-  # Total & 3.34 & 617 & 637 & 446 & 0.7892451 \\ 
+  arrange(sdg) %>%
   adorn_totals("row") %>%
-  # tibble::rownames_to_column() %>%  
-  # pivot_longer(-rowname) %>% 
-  # pivot_wider(names_from=rowname, values_from=value) %>% 
-  # rotate_df() %>% 
   gt(.) %>% 
-  gtsave(str_c('./analysis/output/curated_data.tex'))
+  gtsave(str_c('./analysis/output/sdg.tex'))
+
+annotate2<-osdg
+annotate2 %>%
+  group_by(sdg) %>%
+  reframe(annotators=round(mean(annotators),3),
+          positive=sum(consensus=='TRUE', na.rm=T),
+          negative=sum(consensus=='FALSE', na.rm=T),
+          undecided=100-(positive+negative),
+          agreement=round(mean(agreement),3),
+          sdg=as.numeric(sdg)
+  ) %>%
+  distinct(.) %>%
+  pivot_longer(-sdg) %>%
+  pivot_wider(names_from=name, values_from=value) %>%
+  arrange(sdg) %>%
+  adorn_totals("row") %>%
+  gt(.) %>% 
+  gtsave(str_c('./analysis/output/osdg.tex'))
