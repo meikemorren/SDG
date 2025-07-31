@@ -11,6 +11,7 @@ df <- read.csv("analysis/data/annotated_texts.csv",
                stringsAsFactors = FALSE)
 names(df)[2]  <- "text_id"
 names(df)[11] <- "agreement"
+
 df <- df %>%
   rowwise() %>%
   mutate(
@@ -117,42 +118,55 @@ df_final <- df %>%
     annotators,
     alpha
   )
+# only comments about 12 undecided texts, other we did make decision
+write.csv(df_final %>% filter(!is.na(sdg))%>% select(text_id, sdg),
+          './analysis/data/benchmark_texts.csv')
 
 write.csv(df_final, "analysis/data/sdg_alphas.csv", row.names = F)
 
-annotate<-df_final
-annotate %>%
+df_final %>%
   group_by(sdg) %>%
-  reframe(annotators=round(mean(annotators),3),
-          positive=sum(consensus=='TRUE', na.rm=T),
+  reframe(positive=sum(consensus=='TRUE', na.rm=T),
           negative=sum(consensus=='FALSE', na.rm=T),
           undecided=100-(positive+negative),
+          annotators=round(mean(annotators),1),
           agreement=round(mean(agreement),3),
-          alpha=mean(alpha),
+          alpha=round(mean(alpha),3),
           sdg=as.numeric(sdg)
   ) %>%
+  merge(.,
+        osdg %>%
+        group_by(sdg) %>%
+        filter(text_id %in% df_final$text_id) %>% #nrow() # 1647 ipv 1700!
+        reframe(annotators_osdg=round(mean(annotators),1),
+                # positive=sum(consensus=='TRUE', na.rm=T),
+                # negative=sum(consensus=='FALSE', na.rm=T),
+                # undecided=100-(positive+negative),
+                agreement_osdg=round(mean(agreement),3),
+                sdg=as.numeric(sdg)
+        ), by='sdg', all = T) %>%
   distinct(.) %>%
   pivot_longer(-sdg) %>%
   pivot_wider(names_from=name, values_from=value) %>%
   arrange(sdg) %>%
-  adorn_totals("row") %>%
+  # adorn_totals("row") %>%
   gt(.) %>% 
   gtsave(str_c('./analysis/output/sdg.tex'))
 
-annotate2<-osdg
-annotate2 %>%
-  group_by(sdg) %>%
-  reframe(annotators=round(mean(annotators),3),
-          positive=sum(consensus=='TRUE', na.rm=T),
-          negative=sum(consensus=='FALSE', na.rm=T),
-          undecided=100-(positive+negative),
-          agreement=round(mean(agreement),3),
-          sdg=as.numeric(sdg)
-  ) %>%
-  distinct(.) %>%
-  pivot_longer(-sdg) %>%
-  pivot_wider(names_from=name, values_from=value) %>%
-  arrange(sdg) %>%
-  adorn_totals("row") %>%
-  gt(.) %>% 
-  gtsave(str_c('./analysis/output/osdg.tex'))
+# osdg %>%
+#   group_by(sdg) %>%
+#   filter(text_id %in% df_final$text_id) %>% #nrow() # 1647 ipv 1700!
+#   reframe(annotators=round(mean(annotators),3),
+#           # positive=sum(consensus=='TRUE', na.rm=T),
+#           # negative=sum(consensus=='FALSE', na.rm=T),
+#           # undecided=100-(positive+negative),
+#           agreement=round(mean(agreement),3),
+#           sdg=as.numeric(sdg)
+#   ) %>%
+#   distinct(.) %>%
+#   pivot_longer(-sdg) %>%
+#   pivot_wider(names_from=name, values_from=value) %>%
+#   arrange(sdg) %>%
+#   adorn_totals("row") %>%
+#   gt(.) %>% 
+#   gtsave(str_c('./analysis/output/osdg.tex'))

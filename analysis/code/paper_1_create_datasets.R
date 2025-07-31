@@ -7,6 +7,7 @@ files<-list.files('./analysis/data/annotation')
 df<-NULL
 annotate<-NULL
 
+# final review sheet only contains texts which we eventually agreed on
 for(i in seq(1, length(files))){
   df<-rbind(df, readxl::read_excel(paste0('./analysis/data/annotation/', files[i]), sheet = 'Output'))
 
@@ -25,7 +26,8 @@ for(i in seq(1, length(files))){
              Steve=as.character(Steve),
              `Jean-Baptiste`=as.character(`Jean-Baptiste`),
              SDG=as.character(parse_number(gsub('_',' ',files[i])))) %>%
-      select(`Text ID`, SDG, Text, Group, Finn, Gib, `Jean-Baptiste`, Meike, Steve, Alignment, Consensus, Rationale, Notes)
+      select(`Text ID`, SDG, Text, Group, Finn, Gib, `Jean-Baptiste`, Meike, Steve, 
+             Alignment, Consensus, Rationale, Comments, Notes)
     )
   }
   if(i==2){
@@ -36,9 +38,11 @@ for(i in seq(1, length(files))){
              Meike=as.character(Meike),
              Steve=as.character(Steve),
              `Jean-Baptiste`=as.character(`Jean-Baptiste`),
-             Group=toupper(group),
+             # Group=toupper(group),
+             Comments=Rationale,
              SDG=as.character(parse_number(gsub('_',' ',files[i])))) %>%
-        select(`Text ID`, SDG, Text, Group, Finn, Gib, `Jean-Baptiste`, Meike, Steve, Alignment, Consensus, Rationale, Notes)
+        select(`Text ID`, SDG, Text, Finn, Gib, `Jean-Baptiste`, Meike, Steve, 
+               Alignment, Consensus, Rationale, Comments, Notes)
     )
   }
   if(i==7){
@@ -55,7 +59,8 @@ for(i in seq(1, length(files))){
                                  Steve=as.character(Steve),
                                  `Jean-Baptiste`=as.character(`Jean-Baptiste`),
                                  SDG=as.character(parse_number(gsub('_',' ',files[i])))) %>%
-                          select(`Text ID`, SDG, Text, Finn, Gib, Ivan, `Jean-Baptiste`, Meike, Steve, Alignment, Consensus, Rationale, Notes)
+                          select(`Text ID`, SDG, Text, Finn, Gib, Ivan, `Jean-Baptiste`, Meike, Steve, 
+                                 Alignment, Consensus, Rationale, Comments, Notes)
     )
   }
   if(i %in% c(8,9)){
@@ -74,11 +79,13 @@ for(i in seq(1, length(files))){
                                  Steve=as.character(Steve),
                                  `Jean-Baptiste`=as.character(`Jean-Baptiste`),
                                  SDG=as.character(parse_number(gsub('_',' ',files[i])))) %>%
-                          select(`Text ID`, SDG, Text, Finn, Gib, Ivan, `Jean-Baptiste`, Meike, Steve, Alignment, Consensus, Rationale, Notes)
+                          select(`Text ID`, SDG, Text, Finn, Gib, Ivan, `Jean-Baptiste`, Meike, Steve, 
+                                 Alignment, Consensus, Rationale, Comments, Notes)
     )
   }
   if(i ==10){
-    annotate<-bind_rows(annotate, readxl::read_excel(paste0('./analysis/data/annotation/', files[i]),
+    annotate<-bind_rows(annotate, readxl::read_excel(paste0('./analysis/data/annotation/', 
+                                                            files[i]),
                                                      sheet = 'Final Review') %>%
                           rename(Finn=`Finn...4`,
                                  Gib=`Gib...5`,
@@ -92,19 +99,21 @@ for(i in seq(1, length(files))){
                                  Steve=as.character(Steve),
                                  `Jean-Baptiste`=as.character(`Jean-Baptiste`),
                                  SDG=as.character(parse_number(gsub('_',' ',files[i])))) %>%
-                          select(`Text ID`, SDG, Text, Finn, Gib, `Jean-Baptiste`, Meike, Steve, Alignment, Consensus, Rationale, Notes)
+                          select(`Text ID`, SDG, Text, Finn, Gib, `Jean-Baptiste`, Meike, Steve, 
+                                 Alignment, Consensus, Rationale, Comments, Notes)
     )
   }
   if(i==15){
     annotate<-bind_rows(annotate, readxl::read_excel(paste0('./analysis/data/annotation/', files[i]),
                                                      sheet = 'Final Review') %>%
-                          mutate(SDG=as.character(parse_number(gsub('_',' ',files[i])))) %>%
-                          select(`Text ID`, SDG, Text, Finn, Gib, `Jean-Baptiste`, Steve, Alignment, Consensus, Rationale) 
+                          mutate(SDG=as.character(parse_number(gsub('_',' ',files[i]))),
+                                 Comments = Rationale) %>%
+                          select(`Text ID`, SDG, Text, Finn, Gib, `Jean-Baptiste`, Steve, 
+                                 Alignment, Consensus, Comments, Rationale) 
     )
   }
 }
 
-table(annotate$Consensus)
 
 annotate<-annotate %>% 
   mutate(Finn=as.logical(case_when(Finn=='NOT SDG 10'~ 'FALSE',
@@ -136,11 +145,43 @@ annotate<-annotate %>%
                                         Consensus=='SDG 10'~ 'TRUE',
                                         Consensus=='NOT SDG 7'~ 'FALSE',
                                         Consensus=='SDG 7'~ 'TRUE',
-                                        Consensus=='IGNORE'~ NA,TRUE~Consensus)))
+                                        Consensus=='IGNORE'~ NA,
+                                        Consensus=='UNDECIDED'~ NA,TRUE~Consensus)))
 
-table(annotate$Consensus)
+table(annotate$SDG,annotate$Consensus)
+# SDG 10 reversed -> ask Finn
+# SDG 12 now 39, used to be 37 texts that are not SDG
+
 
 write.csv(annotate,'./analysis/data/annotated_texts.csv')
 write.csv(annotate %>% filter(is.na(Consensus)) %>% select(`Text ID`, SDG, Text),
           './analysis/data/unclassified_texts.csv')
-write.csv(df %>% filter(!is.na(df$sdg)),'./analysis/data/benchmark_texts.csv')
+write.csv(annotate %>% filter(!is.na(SDG), !is.na(Consensus)) %>% 
+            select(`Text ID`, Text, SDG, Rationale, Comments, Notes),
+          './analysis/data/benchmark_texts.csv')
+write.csv(annotate %>% filter(!is.na(SDG), !is.na(Comments), is.na(Consensus)) %>% 
+            # arrange(SDG, Consensus) %>% 
+            select(`Text ID`, SDG, Alignment, Rationale, Comments, Notes),
+          './analysis/data/unclassified_texts_comments.csv', row.names = F)
+
+# compare with benchmark dataset
+df <- read.csv("https://raw.githubusercontent.com/SDGClassification/benchmark/main/benchmark.csv")
+
+# discrepancies for SDG 10, 13, 17 (fewer positive), 2 and 8 (more positive)
+annotate %>% 
+  merge(.,df, by.x='Text', by.y='text') %>% 
+  group_by(SDG) %>% 
+  summarise(n=n(),
+            overlap=sum(Consensus==as.logical(toupper(label)), na.rm=T),
+            npos=sum(Consensus, na.rm=T),
+            npos_benchmark=sum(as.logical(toupper(label)), na.rm=T))
+
+# inspect (change SDG!)
+annotate %>% 
+  merge(.,df, by.x='Text', by.y='text') %>% 
+  filter(SDG==10) %>% 
+  select(`Text ID`,label, Consensus) %>% 
+  mutate(label=as.logical(toupper(label)),
+         overlap=as.character(Consensus==label)) %>% 
+  filter(is.na(overlap))
+  
