@@ -10,12 +10,16 @@
 ### predicted_label: whether the sdg as defined by OSDG is also in list
 ### correct: if expected and predicted label are the same
 
+# extra substep (JOSUA: we didnt discuss this but it would be very useful to have this)
+## calculate accuracy for each sdg, and the average across all sdgs
+## for each model separately
+## export this file so we have the results.
 
 # step 2:
 
 ## assemble all files together, and create column for each LLM correct
 ## compare the models
 ## find texts in which they disagree
-##  add column when LLMs disagree
+## add column when LLMs disagree
 ## save this file -> this is for gib
 
