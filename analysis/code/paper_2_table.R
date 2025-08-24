@@ -6,6 +6,7 @@ library(icr)
 library(gt)
 library(janitor)
 library(stringr)
+library(readr)
 
 df <- read.csv("analysis/data/annotated_texts.csv",
                stringsAsFactors = FALSE)
@@ -23,6 +24,25 @@ df <- df %>%
     Consensus = ifelse(agreement == 1, ifelse(agreement_true == annotators, T, F), NA)
   ) %>%   arrange(SDG, text_id) %>% 
   ungroup()
+
+# add difficulty
+path  <- "analysis/data/annotation"
+files <- list.files(path, pattern = "\\.xlsx$", full.names = TRUE)
+read_source_safe <- function(f) {
+  # read sheet
+  x <- read_excel(f, sheet = "Source")
+  # normalize names + coerce tricky columns to stable types
+  x %>%
+    clean_names() %>%
+    mutate(
+      across(where(is.logical), as.character),        # avoid logical/character clashes
+      across(any_of(c("label", "annotator", "source", "note", "difficulty", "text_id")), as.character),
+      filename = basename(f)
+    )
+}
+annotations <- map_dfr(files, read_source_safe)
+df <- df %>%
+  left_join(annotations %>% select(text_id, difficulty), by = "text_id")
 
 osdg <- read_excel("analysis/data/OSDG/osdg-community-data-v2023-04-01.xlsx") %>%
   mutate(annotators = rowSums(select(., labels_negative, labels_positive), 
@@ -110,6 +130,7 @@ df_final <- df %>%
     text_id,
     text = Text,
     group = Group,
+    difficulty,
     remarks,
     consensus = Consensus,
     agreement,
@@ -152,6 +173,57 @@ df_final %>%
   # adorn_totals("row") %>%
   gt(.) %>% 
   gtsave(str_c('./analysis/output/sdg.tex'))
+
+difficulties <- c("very easy", "easy", "medium", "hard", "very hard")
+
+make_sdg_table_for_difficulty <- function(dlvl) {
+  # subset to the difficulty of interest
+  df_sub <- df_final %>% filter(difficulty == dlvl)
+  
+  # base metrics per sdg from df_sub
+  left_side <- df_sub %>%
+    group_by(sdg) %>%
+    reframe(
+      positive   = sum(consensus %in% c(TRUE, "TRUE"), na.rm = TRUE),
+      negative   = sum(consensus %in% c(FALSE, "FALSE"), na.rm = TRUE),
+      undecided  = 100 - (positive + negative),
+      annotators = round(mean(annotators, na.rm = TRUE), 1),
+      agreement  = round(mean(agreement,  na.rm = TRUE), 3),
+      alpha      = round(mean(alpha,      na.rm = TRUE), 3),
+      sdg        = as.numeric(sdg)
+    )
+  
+  # align osdg to the same texts (and difficulty, via text_id linkage)
+  osdg_aligned <- osdg %>%
+    semi_join(df_sub %>% distinct(text_id), by = "text_id") %>%
+    group_by(sdg) %>%
+    reframe(
+      annotators_osdg = round(mean(annotators, na.rm = TRUE), 1),
+      agreement_osdg  = round(mean(agreement,  na.rm = TRUE), 3),
+      sdg             = as.numeric(sdg)
+    )
+  
+  # merge + reshape like your original
+  out_tbl <- merge(left_side, osdg_aligned, by = "sdg", all = TRUE) %>%
+    distinct(.) %>%
+    pivot_longer(-sdg) %>%
+    pivot_wider(names_from = name, values_from = value) %>%
+    arrange(sdg)
+  
+  # pretty title + file name
+  title_txt <- paste0("SDG metrics (difficulty: ", dlvl, ")")
+  file_txt  <- str_c("./analysis/output/sdg_", str_replace_all(dlvl, " ", "_"), ".tex")
+  
+  gt(out_tbl) %>%
+    tab_header(title = title_txt) %>%
+    gtsave(file_txt)
+  
+  message("Saved: ", file_txt)
+  invisible(out_tbl)
+}
+
+# run for all five difficulty levels
+results_list <- lapply(difficulties, make_sdg_table_for_difficulty)
 
 # osdg %>%
 #   group_by(sdg) %>%
