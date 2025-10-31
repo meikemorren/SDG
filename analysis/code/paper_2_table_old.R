@@ -9,7 +9,8 @@ annotate %>%
                         !is.na(`Jean-Baptiste`),!is.na(Gib)),
          Positive=sum(Meike, Steve, Finn, Ivan,`Jean-Baptiste`,Gib, na.rm=T),
          Negative=Annotators-Positive,
-         Undecided=sum(Consensus)) %>%
+         # Undecided=sum(Consensus)
+         ) %>%
   ungroup() %>%
   group_by(SDG) %>%
   reframe(Annotators=round(mean(Annotators),3),
