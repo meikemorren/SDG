@@ -49,8 +49,10 @@ for(i in seq_along(annotate$`Text ID`)) {
                   label = ifelse(is.na(annotate$Consensus[i]), 'Undecided', 
                                  ifelse(annotate$Consensus[i]==TRUE, 'Confirmed','Rejected')))%>%
     unnest_tokens(word, text, strip_punct = TRUE) %>%
-    mutate(word = str_replace(word, "('s)", "")) %>% 
-    filter(nchar(word) > 2) %>% 
+    mutate(word = str_remove_all(word, "[0-9]")) %>% 
+    mutate(word = str_remove_all(word, "[[:punct:]]"))%>% 
+    mutate(word = str_replace(word, "('s)|e.g.", "")) %>% 
+    filter(nchar(word) > 3) %>% 
     anti_join(stop_words, by = c("word" = "word"))
   series <- rbind(series, clean)
 }
@@ -94,7 +96,7 @@ df.char %>%
          Undecided = paste0(as.character(average_Undecided), ' (',as.character(n_Undecided),')'),
          F = paste0(as.character(F),`p<.05`)
          )%>% 
-  select(sdg, Confirmed, Rejected, Undecided, F) %>% 
+  select(sdg, Confirmed, Rejected, F) %>% 
   gt(.) %>% 
   gtsave(str_c('./analysis/output/texts_test.tex'))
 
@@ -108,19 +110,19 @@ df.char %>%
 
 # appendix: show how sdgs do not differ much in length of texts
 df.char %>% 
-  ggplot(aes(x=as.numeric(n), fill=sdg))+
+  ggplot(aes(x=as.numeric(n), fill=factor(sdg)))+
   geom_histogram()+
   scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
-                             '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
-                             '#126A9F','#13496B'))+
+                             '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C',
+                             '#407F46','#1F97D4','#59BA48','#126A9F','#13496B'))+
   facet_wrap(~sdg, scales='fixed')+
   theme(legend.position="none", 
         axis.title = element_blank())
 
 df.char %>% 
-  ggplot(aes(x=as.numeric(n), color=label, fill=sdg))+
+  ggplot(aes(x=as.numeric(n), color=label, fill=factor(sdg)))+
   geom_histogram()+
-  scale_color_manual(values=c("black","grey",'lightgrey'))+
+  scale_color_manual(values=c("black","darkgrey",'white'))+
   scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
                              '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
                              '#126A9F','#13496B'))+
@@ -139,33 +141,95 @@ df.char %>%
 
 
 # # # across labels, how often most popular words are mentioned
-series  %>%
+
+# 1. Get background data (all labels)
+bg_data <- series %>%
+  filter(label == "Confirmed") %>%
+  group_by(sdg, word) %>%
+  count(name = "bg_n", sort = TRUE) %>%
+  top_n(10) %>%
+  ungroup()
+
+# 2. Get foreground data (Confirmed only)
+fg_data <- series %>%
+  filter(label != "Confirmed") %>%
   group_by(sdg) %>%
   count(word, sort = TRUE) %>%
   top_n(10) %>%
-  ungroup() %>% #tabyl(sdg)%>%
+  ungroup()
+
+# 3. Join datasets
+plot_data <- left_join(fg_data, bg_data, by = c("sdg", "word")) %>%
+  replace_na(list(bg_n = 0)) %>%
+  mutate(sdg = factor(sdg, levels = as.character(1:17)),
+         name = reorder_within(word, n, sdg))
+
+# 4. Plot both
+ggplot(plot_data, aes(x = name)) +
+  geom_col(aes(y = bg_n), fill = "grey80") +  # Background bars
+  geom_col(aes(y = n, fill = sdg), show.legend = FALSE) +  # Foreground bars
+  facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
+  scale_fill_manual(values = c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
+                               '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C',
+                               '#407F46','#1F97D4','#59BA48','#126A9F','#13496B')) +
+  scale_x_reordered() +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.title = element_blank(),
+        legend.position = "none")
+
+
+series  %>%
+  # filter(label!='Confirmed') %>% 
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
   mutate(sdg = factor(sdg,levels=c('1','2','3','4','5','6','7','8','9',
                                    '10','11','12','13','14','15','16','17')),
          name = reorder_within(word, -n, sdg),
          name = str_replace(name, '___(\\d+)','')
-         ) %>% 
-  # arrange(sdg, desc(n), desc(name)) %>% 
-  # group_by(sdg,n) %>% mutate(text_order = 1:length(sdg)) %>% 
-  # mutate(name = fct_inorder(name)) %>% 
-  # ggplot(aes(reorder(word, text_order), n, fill = sdg)) +
-  # ggplot(aes(reorder_within(word, n, sdg),n,fill=sdg))+
+  ) %>% 
   ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
   geom_col(show.legend = FALSE) +
-  # geom_text(aes(label = n), hjust = 1) +
-  # geom_bar(stat = "identity") +
-  facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
+  # facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
   scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
-  '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
-  '#126A9F','#13496B'))+
-  labs(x = "NULL", y = "Frequency") +
+                             '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
+                             '#126A9F','#13496B'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
   coord_flip() +
   theme(legend.position="none", 
         axis.title = element_blank())
+
+#series  %>%
+#   group_by(sdg) %>%
+#   count(word, sort = TRUE) %>%
+#   top_n(10) %>%
+#   ungroup() %>% #tabyl(sdg)%>%
+#   mutate(sdg = factor(sdg,levels=c('1','2','3','4','5','6','7','8','9',
+#                                    '10','11','12','13','14','15','16','17')),
+#          name = reorder_within(word, -n, sdg),
+#          name = str_replace(name, '___(\\d+)','')
+#          ) %>% 
+#   # arrange(sdg, desc(n), desc(name)) %>% 
+#   # group_by(sdg,n) %>% mutate(text_order = 1:length(sdg)) %>% 
+#   # mutate(name = fct_inorder(name)) %>% 
+#   # ggplot(aes(reorder(word, text_order), n, fill = sdg)) +
+#   # ggplot(aes(reorder_within(word, n, sdg),n,fill=sdg))+
+#   ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+#   geom_col(show.legend = FALSE) +
+#   # geom_text(aes(label = n), hjust = 1) +
+#   # geom_bar(stat = "identity") +
+#   facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
+#   scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
+#   '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
+#   '#126A9F','#13496B'))+
+#   labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+#   coord_flip() +
+#   theme(legend.position="none", 
+#         axis.title = element_blank())
 
 # differentiate between texts that are and are not about SDG
 
