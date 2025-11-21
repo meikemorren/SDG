@@ -57,6 +57,7 @@ for(i in seq_along(annotate$`Text ID`)) {
   series <- rbind(series, clean)
 }
 
+
 # head(series)
 # table(series$label)
 # mean(tapply(series$word, series$id, length))
@@ -259,7 +260,7 @@ series  %>%
 
 series  %>%
   # no overlap confirmed & undecided
-  filter(sdg %in% c('2','4','6','8','14')) %>%
+  filter(sdg %in% c('4','6','8','14')) %>%
   group_by(sdg, label) %>%
   count(word, sort = TRUE) %>%
   top_n(3) %>% 
@@ -392,3 +393,184 @@ series  %>%
 #               y_position = 11.5, tip_length = 0.2, vjust = .5)+
 #   theme(axis.text.y.right = element_blank(),
 #         axis.title.y.left = element_text(hjust=0.1))
+
+################# ################# ################# 
+####################### ngrams ######################
+################# ################# ################# 
+series2 <- tibble()
+for(i in seq_along(annotate$`Text ID`)) {
+  
+  clean <- tibble(id = annotate$`Text ID`[i],
+                  text = annotate$Text[i],
+                  sdg = annotate$SDG[i],
+                  label = ifelse(is.na(annotate$Consensus[i]), 'Undecided', 
+                                 ifelse(annotate$Consensus[i]==TRUE, 'Confirmed','Rejected')))%>%
+    unnest_tokens(word, text, strip_punct = TRUE) %>%
+    mutate(word = str_remove_all(word, "[0-9]")) %>% 
+    mutate(word = str_remove_all(word, "[[:punct:]]"))%>% 
+    mutate(word = str_replace(word, "('s)|e.g.", "")) %>% 
+    filter(nchar(word) > 3)  %>%
+    anti_join(stop_words, by = c("word" = "word")) %>% 
+    group_by(id, sdg) %>%
+    summarize(combined_text = str_c(word, collapse = " ")) %>% 
+    unnest_tokens(word, combined_text,  token="ngrams",n=2)
+  series2 <- rbind(series2, clean)
+}
+
+raw_tibble<-tibble()
+for(i in seq_along(annotate$`Text ID`)) {
+  raw<- tibble(
+    id = annotate$`Text ID`[i],
+    text = annotate$Text[i],
+    sdg = annotate$SDG[i],
+    label = ifelse(is.na(annotate$Consensus[i]), 'Undecided', 
+                   ifelse(annotate$Consensus[i]==TRUE, 'Confirmed','Rejected'))) %>% 
+    select(id, label, sdg)
+  raw_tibble<-rbind(raw_tibble, raw)
+}
+
+series2<-series2 %>% merge(., raw_tibble,
+  by=c("id","sdg")
+)
+# get the info per text
+df.char2<-series2 %>% 
+  group_by(sdg, id, label) %>% 
+  summarise(n=length(word),
+  )
+
+aov_n2<-df.char2 %>% mutate(n=as.numeric(n)) %>%  group_by(sdg) %>% anova_test(n ~ label)
+cols <-c('F','average_Confirmed', 'average_Rejected', 'average_Undecided','n_Confirmed', 'n_Rejected', 'n_Undecided')
+df.char2 %>% 
+  group_by(sdg, label) %>% 
+  summarise(average=mean(as.numeric(n)),
+            n=length(n)) %>%
+  pivot_wider(names_from=label, values_from=c(average, n)) %>%
+  merge(.,aov_n2, by='sdg') %>% 
+  select(-c(Effect, DFn, DFd,ges)) %>% 
+  arrange(sdg) %>% 
+  mutate(across(cols, round, 1),
+         Confirmed = paste0(as.character(average_Confirmed), ' (',as.character(n_Confirmed),')'),
+         Rejected = paste0(as.character(average_Rejected), ' (',as.character(n_Rejected),')'),
+         Undecided = paste0(as.character(average_Undecided), ' (',as.character(n_Undecided),')'),
+         F = paste0(as.character(F),`p<.05`)
+  )%>% 
+  select(sdg, Confirmed, Rejected, F) %>% 
+  gt(.) %>% 
+  gtsave(str_c('./analysis/output/texts_test_bigram.tex'))
+
+
+
+# # # across labels, how often most popular words are mentioned
+
+# 1. Get background data (all labels)
+bg_data2 <- series2 %>%
+  filter(label == "Confirmed") %>%
+  group_by(sdg, word) %>%
+  count(name = "bg_n", sort = TRUE) %>%
+  top_n(10) %>%
+  ungroup()
+
+# 2. Get foreground data (Confirmed only)
+fg_data2 <- series2 %>%
+  filter(label != "Confirmed") %>%
+  group_by(sdg) %>%
+  count(word, sort = TRUE) %>%
+  top_n(10) %>%
+  ungroup()
+
+# 3. Join datasets
+plot_data2 <- left_join(fg_data2, bg_data2, by = c("sdg", "word")) %>%
+  replace_na(list(bg_n = 0)) %>%
+  mutate(sdg = factor(sdg, levels = as.character(1:17)),
+         name = reorder_within(word, n, sdg))
+
+
+series2  %>%
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('1','2','3','4','5','6','7','8','9',
+                                   '10','11','12','13','14','15','16','17')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  # facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  # all sdgs
+  scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
+                             '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
+                             '#126A9F','#13496B'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
+
+
+
+# overlap confirmed & undecided general terms
+series2  %>%
+  # overlap confirmed & undecided general terms
+  filter(sdg %in% c('9','10','13','16','17')) %>% 
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('9','10','11','13','16','17')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  scale_fill_manual(values=c('#F26A2D','#E01483','#407F46','#126A9F','#13496B'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
+
+series2  %>%
+  # overlap confirmed & undecided topic specific terms
+  filter(sdg %in% c('1','3','5','12','15')) %>%
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('1','2','3','5','11','12','15')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  scale_fill_manual(values=c('#E5233D','#4CA146','#EF402C','#F89D2A','#BF8D2C','#59BA48'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
+
+series2  %>%
+  # no overlap confirmed & undecided
+  filter(sdg %in% c('4','6','8','14')) %>%
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('4','6','8','14')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  scale_fill_manual(values=c('#DDA73A','#C5192D','#27BFE6','#A31C44','#1F97D4'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
