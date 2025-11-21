@@ -223,7 +223,7 @@ series  %>%
   top_n(3) %>% 
   slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
   ungroup() %>% 
-  mutate(sdg = factor(sdg,levels=c('9','10','13','16','17')),
+  mutate(sdg = factor(sdg,levels=c('9','10','11','13','16','17')),
          name = reorder_within(word, -n, sdg),
          name = str_replace(name, '___(\\d+)','')
   ) %>%
@@ -238,13 +238,13 @@ series  %>%
 
 series  %>%
   # overlap confirmed & undecided topic specific terms
-  filter(sdg %in% c('1','3','5','11','12','15')) %>%
+  filter(sdg %in% c('1','3','5','12','15')) %>%
   group_by(sdg, label) %>%
   count(word, sort = TRUE) %>%
   top_n(3) %>% 
   slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
   ungroup() %>% 
-  mutate(sdg = factor(sdg,levels=c('1','3','5','11','12','15')),
+  mutate(sdg = factor(sdg,levels=c('1','2','3','5','11','12','15')),
          name = reorder_within(word, -n, sdg),
          name = str_replace(name, '___(\\d+)','')
   ) %>%
@@ -265,7 +265,7 @@ series  %>%
   top_n(3) %>% 
   slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
   ungroup() %>% 
-  mutate(sdg = factor(sdg,levels=c('2','4','6','8','14')),
+  mutate(sdg = factor(sdg,levels=c('4','6','8','14')),
          name = reorder_within(word, -n, sdg),
          name = str_replace(name, '___(\\d+)','')
   ) %>%
