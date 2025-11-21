@@ -11,7 +11,7 @@ annotate %>%
          Negative=Annotators-Positive,
          Undecided=sum(Consensus)) %>%
   ungroup() %>%
-  group_by(SDG) %>%
+  group_by(SDG) %>% select(SDG, Alignment)
   reframe(Annotators=round(mean(Annotators),3),
             Positive=sum(Consensus=='TRUE', na.rm=T),
             Negative=sum(Consensus=='FALSE', na.rm=T),
@@ -165,22 +165,23 @@ plot_data <- left_join(fg_data, bg_data, by = c("sdg", "word")) %>%
          name = reorder_within(word, n, sdg))
 
 # 4. Plot both
-ggplot(plot_data, aes(x = name)) +
-  geom_col(aes(y = bg_n), fill = "grey80") +  # Background bars
-  geom_col(aes(y = n, fill = sdg), show.legend = FALSE) +  # Foreground bars
-  facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
-  scale_fill_manual(values = c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
-                               '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C',
-                               '#407F46','#1F97D4','#59BA48','#126A9F','#13496B')) +
-  scale_x_reordered() +
-  coord_flip() +
-  theme_minimal() +
-  theme(axis.title = element_blank(),
-        legend.position = "none")
+# ggplot(plot_data, aes(x = name)) +
+#   geom_col(aes(y = bg_n), fill = "grey80") +  # Background bars
+#   geom_col(aes(y = n, fill = sdg), show.legend = FALSE) +  # Foreground bars
+#   facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
+#   scale_fill_manual(values = c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
+#                                '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C',
+#                                '#407F46','#1F97D4','#59BA48','#126A9F','#13496B')) +
+#   scale_x_reordered() +
+#   coord_flip() +
+#   theme_minimal() +
+#   theme(axis.title = element_blank(),
+#         legend.position = "none")
 
-
+# SDGsg with overlap keywords (confirmed vs recjected 
+## of which no overlap (WITH REJECTED): all but:
+#### 10 (countries), 14 (management), 17 (countries, development)
 series  %>%
-  # filter(label!='Confirmed') %>% 
   group_by(sdg, label) %>%
   count(word, sort = TRUE) %>%
   top_n(3) %>% 
@@ -190,14 +191,88 @@ series  %>%
                                    '10','11','12','13','14','15','16','17')),
          name = reorder_within(word, -n, sdg),
          name = str_replace(name, '___(\\d+)','')
-  ) %>% 
+  ) %>%
   ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
   geom_col(show.legend = FALSE) +
   # facet_wrap(~ sdg, scales = "free_y", ncol = 4) +
   facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  # all sdgs
   scale_fill_manual(values=c('#E5233D','#DDA73A','#4CA146','#C5192D','#EF402C','#27BFE6',
-                             '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
-                             '#126A9F','#13496B'))+
+  '#FBC412','#A31C44','#F26A2D','#E01483','#F89D2A','#BF8D2C','#407F46','#1F97D4','#59BA48',
+  '#126A9F','#13496B'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
+
+
+
+
+# split into three graphs:
+# SDGsg with overlap keywords (confirmed vs undecided so 7 excluded)
+## of which general terms: 9, 10, 13, 16, 17
+## of which topic-specific terms: 1, 3, 5, 11, 12, 15
+## of which no overlap (WITH UNDECIDED): 2, 4, 6, 8, 14
+
+# overlap confirmed & undecided general terms
+series  %>%
+  # overlap confirmed & undecided general terms
+  filter(sdg %in% c('9','10','13','16','17')) %>% 
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('9','10','13','16','17')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  scale_fill_manual(values=c('#F26A2D','#E01483','#407F46','#126A9F','#13496B'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
+
+series  %>%
+  # overlap confirmed & undecided topic specific terms
+  filter(sdg %in% c('1','3','5','11','12','15')) %>%
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('1','3','5','11','12','15')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  scale_fill_manual(values=c('#E5233D','#4CA146','#EF402C','#F89D2A','#BF8D2C','#59BA48'))+
+  labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
+  coord_flip() +
+  theme(legend.position="none", 
+        axis.title = element_blank())
+
+series  %>%
+  # no overlap confirmed & undecided
+  filter(sdg %in% c('2','4','6','8','14')) %>%
+  group_by(sdg, label) %>%
+  count(word, sort = TRUE) %>%
+  top_n(3) %>% 
+  slice_max(order_by = n, n = 3, with_ties = FALSE) %>% 
+  ungroup() %>% 
+  mutate(sdg = factor(sdg,levels=c('2','4','6','8','14')),
+         name = reorder_within(word, -n, sdg),
+         name = str_replace(name, '___(\\d+)','')
+  ) %>%
+  ggplot(aes(reorder_within(name,n,sdg), n, fill = sdg)) +
+  geom_col(show.legend = FALSE) +
+  facet_grid(rows=vars(sdg), cols=vars(label), scales='free_y')+
+  scale_fill_manual(values=c('#DDA73A','#C5192D','#27BFE6','#A31C44','#1F97D4'))+
   labs(x = "NULL", y = "Frequency") + scale_x_reordered()+
   coord_flip() +
   theme(legend.position="none", 
