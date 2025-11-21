@@ -11,7 +11,7 @@ annotate %>%
          Negative=Annotators-Positive,
          Undecided=sum(Consensus)) %>%
   ungroup() %>%
-  group_by(SDG) %>% select(SDG, Alignment)
+  group_by(SDG) %>% select(SDG, Annotators, Alignment, Consensus) %>% 
   reframe(Annotators=round(mean(Annotators),3),
             Positive=sum(Consensus=='TRUE', na.rm=T),
             Negative=sum(Consensus=='FALSE', na.rm=T),
